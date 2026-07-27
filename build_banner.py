@@ -75,7 +75,6 @@ def process_portrait(mode='dark'):
     mask = binary_fill_holes(mask)
     
     # Contrast Pipeline:
-    # Contrast 1.3x only, autocontrast(cutoff=1) + UnsharpMask(radius=3, percent=140)
     gray = img_resized.convert('L')
     gray = ImageEnhance.Contrast(gray).enhance(1.3)
     gray = ImageOps.autocontrast(gray, cutoff=1)
@@ -120,7 +119,6 @@ def process_portrait(mode='dark'):
     if mode == 'dark':
         dot_mask = (out_bits == 255) & mask
     else:
-        # Light mode: dots draw dark subject features inside mask
         dot_mask = (out_bits == 0) & mask
         
     ys, xs = np.where(dot_mask)
@@ -356,86 +354,96 @@ def generate_svg(mode='dark'):
     svg.append('</g>')
     
     # Layer B: Main Portrait Drift Bands (94 drift bands)
+    # Strict phase separation:
+    # 0s-3.0s (Portrait Hold): Opacity = 1, Translate = (0,0)
+    # 3.0s-4.3s (Trans to Logo 1): Opacity = 1 -> 0, Translate = (0,0) -> (bx,by)
+    # 4.3s-12.9s (Logo Phase): Opacity = 0
+    # 12.9s-14.2s (Return to Portrait): Opacity = 0 -> 1, Translate = (bx,by) -> (0,0)
     key_times = "0; 0.211; 0.303; 0.444; 0.535; 0.676; 0.768; 0.908; 1.0"
-    
+
     svg.append(f'<g id="drift-layer" stroke="{pal["portrait_dot"]}" stroke-width="{SCALE:.2f}" shape-rendering="crispEdges">')
     for b_idx, band in enumerate(bands_dots):
         path_d = dots_to_stroke_runs(band, X_OFFSET, Y_OFFSET, SCALE)
         factor = 0.8 + 0.4 * (b_idx / num_bands)
         bx = vec_x * factor
         by = vec_y * factor
-        
-        trans_vals = f"0,0; 0,0; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; 0,0; 0,0"
-        opac_vals = "1; 1; 0.15; 0.15; 0.15; 0.15; 0.15; 1; 1"
-        
+
+        trans_vals = f"0,0; 0,0; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; 0,0"
+        opac_vals = "1; 1; 0; 0; 0; 0; 0; 0; 1"
+
         svg.append(f'<g>')
         svg.append(f'<path d="{path_d}"/>')
         svg.append(f'<animateTransform attributeName="transform" type="translate" values="{trans_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
         svg.append(f'<animate attributeName="opacity" values="{opac_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
         svg.append('</g>')
     svg.append('</g>')
-    
+
     # Layer C: Travellers Swarm (~900 dots morphing between logos)
-    traveller_opac = "0; 0; 1; 1; 1; 1; 1; 0; 0"
-    
+    # Strict phase separation:
+    # 0s-3.0s (Portrait Hold): Opacity = 0
+    # 3.0s-4.3s (Trans to Logo 1): Opacity = 0 -> 1
+    # 4.3s-12.9s (Logo Phase): Opacity = 1 (Morphing p1 -> p2 -> p3)
+    # 12.9s-14.2s (Return to Portrait): Opacity = 1 -> 0
+    traveller_opac = "0; 0; 1; 1; 1; 1; 1; 1; 0"
+
     svg.append(f'<g id="travellers-swarm">')
     dot_r = 1.2
     for i in range(900):
         x1 = X_OFFSET + p1[i, 0] * SCALE
         y1 = Y_OFFSET + p1[i, 1] * SCALE
-        
+
         x2 = X_OFFSET + p2[i, 0] * SCALE
         y2 = Y_OFFSET + p2[i, 1] * SCALE
-        
+
         x3 = X_OFFSET + p3[i, 0] * SCALE
         y3 = Y_OFFSET + p3[i, 1] * SCALE
-        
+
         cx_vals = f"{x1:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}; {x2:.1f}; {x2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}"
         cy_vals = f"{y1:.1f}; {y1:.1f}; {y1:.1f}; {y1:.1f}; {y2:.1f}; {y2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}"
-        
+
         svg.append(f'<circle cx="{x1:.1f}" cy="{y1:.1f}" r="{dot_r}" fill="{pal["portrait_dot"]}" opacity="0">')
         svg.append(f'<animate attributeName="cx" values="{cx_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
         svg.append(f'<animate attributeName="cy" values="{cy_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
         svg.append(f'<animate attributeName="opacity" values="{traveller_opac}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
         svg.append('</circle>')
     svg.append('</g>')
-    
+
     svg.append('</g>')
-    
+
     # --- System Info Rows (Right Panel) ---
     start_y = 126
     row_h = 27
     left_x = 478
     right_x = 1132
-    
+
     svg.append('<g id="info-rows">')
     for idx, (label, val) in enumerate(rows_data):
         y = start_y + idx * row_h
-        
+
         lbl_w = len(label) * 8.5 + 8
         val_w = len(val) * 8.5 + 8
-        
+
         leader_start_x = left_x + lbl_w + 6
         leader_end_x = right_x - val_w - 6
-        
+
         svg.append(f'<g transform="translate(0, {y})">')
         svg.append(f'<text x="{left_x}" y="0" class="lbl-text">{label}</text>')
-        
+
         if leader_end_x > leader_start_x + 10:
             svg.append(f'<line x1="{leader_start_x:.1f}" y1="-4" x2="{leader_end_x:.1f}" y2="-4" stroke="{pal["dotted_leader"]}" stroke-width="1.5" stroke-dasharray="2 4"/>')
-            
+
         val_len_px = len(val) * 8.5
         svg.append(f'<text x="{right_x}" y="0" class="val-text" text-anchor="end" textLength="{val_len_px:.1f}" lengthAdjust="spacingAndGlyphs">{val}</text>')
         svg.append('</g>')
     svg.append('</g>')
-    
+
     svg.append('</svg>')
-    
+
     full_svg = '\n'.join(svg)
     filename = f"{mode}.svg"
     with open(filename, 'w') as f:
         f.write(full_svg)
-        
+
     size_kb = os.path.getsize(filename) / 1024.0
     print(f"[{mode.upper()}] Saved {filename} ({size_kb:.1f} KB)")
 
