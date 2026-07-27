@@ -31,6 +31,9 @@ PALETTE = {
         'pill_bg': 'rgba(34, 211, 238, 0.12)',
         'pill_border': 'rgba(34, 211, 238, 0.4)',
         'pill_text': '#22D3EE',
+        'mail_bg': 'rgba(34, 211, 238, 0.10)',
+        'mail_border': 'rgba(34, 211, 238, 0.45)',
+        'mail_text': '#22D3EE'
     },
     'light': {
         'bg': '#F8FAFC',
@@ -47,6 +50,9 @@ PALETTE = {
         'pill_bg': 'rgba(8, 145, 178, 0.1)',
         'pill_border': 'rgba(8, 145, 178, 0.3)',
         'pill_text': '#0891B2',
+        'mail_bg': 'rgba(8, 145, 178, 0.08)',
+        'mail_border': 'rgba(8, 145, 178, 0.35)',
+        'mail_text': '#0891B2'
     }
 }
 
@@ -260,9 +266,11 @@ def generate_svg(mode='dark'):
         .hdr-title { font-size: 13px; font-weight: 600; fill: ''' + pal['chrome'] + '''; }
         .hdr-pill { font-size: 14px; font-weight: 600; fill: ''' + pal['pill_text'] + '''; }
         .live-text { font-size: 12px; font-weight: 700; fill: ''' + pal['live_red'] + '''; letter-spacing: 1px; }
-        .lbl-text { font-size: 14px; font-weight: 500; fill: ''' + pal['text_label'] + '''; }
-        .val-text { font-size: 14px; font-weight: 600; fill: ''' + pal['text_value'] + '''; }
-        .section-lbl { font-size: 11px; font-weight: 700; fill: ''' + pal['chrome'] + '''; letter-spacing: 1.5px; }
+        .lbl-text { font-size: 14.5px; font-weight: 500; fill: ''' + pal['text_label'] + '''; }
+        .val-text { font-size: 14.5px; font-weight: 600; fill: ''' + pal['text_value'] + '''; }
+        .lbl-text-mail { font-size: 14.5px; font-weight: 700; fill: ''' + pal['mail_text'] + '''; }
+        .val-text-mail { font-size: 14.5px; font-weight: 700; fill: ''' + pal['mail_text'] + '''; }
+        .section-lbl { font-size: 12px; font-weight: 700; fill: ''' + pal['chrome'] + '''; letter-spacing: 1.5px; }
     ''')
     svg.append('</style>')
     svg.append('</defs>')
@@ -282,7 +290,7 @@ def generate_svg(mode='dark'):
     
     svg.append(f'<text x="88" y="25" class="hdr-title">profile.sh --live</text>')
     
-    # Badges
+    # Live Badge (Pulsing) & Handle Pill in Top Right
     svg.append('<g transform="translate(930, 10)">')
     svg.append(f'<rect x="0" y="0" width="75" height="22" rx="11" fill="rgba(239, 68, 68, 0.12)" stroke="rgba(239, 68, 68, 0.4)" stroke-width="1"/>')
     svg.append(f'<circle cx="14" cy="11" r="4" fill="{pal["live_red"]}">')
@@ -296,19 +304,29 @@ def generate_svg(mode='dark'):
     svg.append(f'<text x="12" y="15" class="hdr-pill">@Aniket0025</text>')
     svg.append('</g>')
     
-    # Cards
-    svg.append(f'<rect x="24" y="58" width="410" height="528" fill="{pal["card_bg"]}" stroke="{pal["card_border"]}" stroke-width="1" rx="8"/>')
+    # Cards with Growing/Pulsing Animated Border
+    svg.append(f'<g id="left-card-group">')
+    svg.append(f'<rect x="24" y="58" width="410" height="528" fill="{pal["card_bg"]}" stroke="{pal["card_border"]}" stroke-width="1" rx="8">')
+    svg.append(f'<animate attributeName="stroke" values="{pal["card_border"]}; {pal["chrome"]}; {pal["card_border"]}" dur="5s" repeatCount="indefinite"/>')
+    svg.append(f'<animate attributeName="stroke-width" values="1; 1.8; 1" dur="5s" repeatCount="indefinite"/>')
+    svg.append(f'</rect>')
     svg.append(f'<text x="44" y="86" class="section-lbl">VISUAL.MAP</text>')
     svg.append(f'<line x1="24" y1="98" x2="434" y2="98" stroke="{pal["card_border"]}" stroke-width="1"/>')
+    svg.append(f'</g>')
     
-    svg.append(f'<rect x="454" y="58" width="702" height="528" fill="{pal["card_bg"]}" stroke="{pal["card_border"]}" stroke-width="1" rx="8"/>')
+    svg.append(f'<g id="right-card-group">')
+    svg.append(f'<rect x="454" y="58" width="702" height="528" fill="{pal["card_bg"]}" stroke="{pal["card_border"]}" stroke-width="1" rx="8">')
+    svg.append(f'<animate attributeName="stroke" values="{pal["card_border"]}; {pal["chrome"]}; {pal["card_border"]}" dur="5s" repeatCount="indefinite"/>')
+    svg.append(f'<animate attributeName="stroke-width" values="1; 1.8; 1" dur="5s" repeatCount="indefinite"/>')
+    svg.append(f'</rect>')
     svg.append(f'<text x="478" y="86" class="section-lbl">SYSTEM.INFO</text>')
     svg.append(f'<line x1="454" y1="98" x2="1156" y2="98" stroke="{pal["card_border"]}" stroke-width="1"/>')
+    svg.append(f'</g>')
     
     # Portrait Container
     svg.append(f'<g id="portrait-container">')
     
-    # Layer A: Intro Layer (Fades in over 1.8s, then FADES OUT COMPLETELY to opacity 0 at 2.8s)
+    # Layer A: Intro Layer
     svg.append(f'<g id="intro-layer" stroke="{pal["portrait_dot"]}" stroke-width="{SCALE:.2f}" shape-rendering="crispEdges">')
     svg.append('<animate attributeName="opacity" values="1;1;0" keyTimes="0; 0.8; 1" begin="0s" dur="3.0s" fill="freeze"/>')
     
@@ -320,8 +338,7 @@ def generate_svg(mode='dark'):
         svg.append('</path>')
     svg.append('</g>')
     
-    # Layer B: Main Portrait Drift Layer (SMIL Loop 13.0s)
-    # Photo is visible (0s-3.0s), dissolves down (3.0s-3.8s), stays hidden (3.8s-11.8s), snaps back (11.8s-12.5s)
+    # Layer B: Main Portrait Drift Layer
     key_times = "0; 0.231; 0.292; 0.446; 0.523; 0.677; 0.754; 0.908; 0.962; 1.0"
     opac_vals = "1; 1; 0; 0; 0; 0; 0; 0; 1; 1"
 
@@ -341,26 +358,15 @@ def generate_svg(mode='dark'):
         svg.append('</g>')
     svg.append('</g>')
 
-    # Layer C: Direct Photo-to-Logo-to-Photo Particle Morph Swarm
-    # 0s-3.0s: At p_photo, opacity = 0
-    # 3.0s-3.8s: Fly p_photo -> p1 (Flutter logo), opacity 0 -> 1 (Particles flow OUT of photo to build Flutter logo!)
-    # 3.8s-5.8s: Hold p1 (Flutter logo), opacity = 1
-    # 5.8s-6.8s: Fly p1 -> p2 (Code logo), opacity = 1 (Morph to Code logo!)
-    # 6.8s-8.8s: Hold p2 (Code logo), opacity = 1
-    # 8.8s-9.8s: Fly p2 -> p3 (Vercel logo), opacity = 1 (Morph to Vercel logo!)
-    # 9.8s-11.8s: Hold p3 (Vercel logo), opacity = 1
-    # 11.8s-12.5s: Fly p3 -> p_photo, opacity 1 -> 0 (Particles fly BACK IN to assemble photo!)
-    # 12.5s-13.0s: At p_photo, opacity = 0
+    # Layer C: Direct Photo-to-Logo Particle Swarm
     traveller_opac = "0; 0; 1; 1; 1; 1; 1; 1; 0; 0"
 
     svg.append(f'<g id="travellers-swarm">')
     dot_r = 1.2
     for i in range(900):
-        # Photo start/end point
         x0 = X_OFFSET + p_photo[i, 0] * SCALE
         y0 = Y_OFFSET + p_photo[i, 1] * SCALE
 
-        # Logo points
         x1 = X_OFFSET + p1[i, 0] * SCALE
         y1 = Y_OFFSET + p1[i, 1] * SCALE
 
@@ -370,7 +376,6 @@ def generate_svg(mode='dark'):
         x3 = X_OFFSET + p3[i, 0] * SCALE
         y3 = Y_OFFSET + p3[i, 1] * SCALE
 
-        # Direct flow chain: p_photo -> p1 -> p2 -> p3 -> p_photo
         cx_vals = f"{x0:.1f}; {x0:.1f}; {x1:.1f}; {x1:.1f}; {x2:.1f}; {x2:.1f}; {x3:.1f}; {x3:.1f}; {x0:.1f}; {x0:.1f}"
         cy_vals = f"{y0:.1f}; {y0:.1f}; {y1:.1f}; {y1:.1f}; {y2:.1f}; {y2:.1f}; {x3:.1f}; {y3:.1f}; {y0:.1f}; {y0:.1f}"
 
@@ -383,7 +388,7 @@ def generate_svg(mode='dark'):
 
     svg.append('</g>')
 
-    # Info Rows
+    # Info Rows with Email Highlighting Pill
     start_y = 126
     row_h = 27
     left_x = 478
@@ -393,20 +398,33 @@ def generate_svg(mode='dark'):
     for idx, (label, val) in enumerate(rows_data):
         y = start_y + idx * row_h
 
-        lbl_w = len(label) * 8.5 + 8
-        val_w = len(val) * 8.5 + 8
+        lbl_w = len(label) * 8.8 + 8
+        val_w = len(val) * 8.8 + 8
 
         leader_start_x = left_x + lbl_w + 6
         leader_end_x = right_x - val_w - 6
 
         svg.append(f'<g transform="translate(0, {y})">')
-        svg.append(f'<text x="{left_x}" y="0" class="lbl-text">{label}</text>')
-
-        if leader_end_x > leader_start_x + 10:
-            svg.append(f'<line x1="{leader_start_x:.1f}" y1="-4" x2="{leader_end_x:.1f}" y2="-4" stroke="{pal["dotted_leader"]}" stroke-width="1.5" stroke-dasharray="2 4"/>')
-
-        val_len_px = len(val) * 8.5
-        svg.append(f'<text x="{right_x}" y="0" class="val-text" text-anchor="end" textLength="{val_len_px:.1f}" lengthAdjust="spacingAndGlyphs">{val}</text>')
+        
+        # Email ID Highlight (Grid.Mail)
+        if label == "Grid.Mail":
+            # Highlight pill rectangle
+            svg.append(f'<rect x="{left_x - 8}" y="-17" width="{right_x - left_x + 16}" height="24" rx="6" fill="{pal["mail_bg"]}" stroke="{pal["mail_border"]}" stroke-width="1">')
+            svg.append(f'<animate attributeName="stroke" values="{pal["mail_border"]}; {pal["chrome"]}; {pal["mail_border"]}" dur="3s" repeatCount="indefinite"/>')
+            svg.append(f'</rect>')
+            
+            svg.append(f'<text x="{left_x}" y="0" class="lbl-text-mail">{label}</text>')
+            if leader_end_x > leader_start_x + 10:
+                svg.append(f'<line x1="{leader_start_x:.1f}" y1="-4" x2="{leader_end_x:.1f}" y2="-4" stroke="{pal["chrome"]}" stroke-width="1.5" stroke-dasharray="2 4"/>')
+            val_len_px = len(val) * 8.8
+            svg.append(f'<text x="{right_x}" y="0" class="val-text-mail" text-anchor="end" textLength="{val_len_px:.1f}" lengthAdjust="spacingAndGlyphs">{val}</text>')
+        else:
+            svg.append(f'<text x="{left_x}" y="0" class="lbl-text">{label}</text>')
+            if leader_end_x > leader_start_x + 10:
+                svg.append(f'<line x1="{leader_start_x:.1f}" y1="-4" x2="{leader_end_x:.1f}" y2="-4" stroke="{pal["dotted_leader"]}" stroke-width="1.5" stroke-dasharray="2 4"/>')
+            val_len_px = len(val) * 8.8
+            svg.append(f'<text x="{right_x}" y="0" class="val-text" text-anchor="end" textLength="{val_len_px:.1f}" lengthAdjust="spacingAndGlyphs">{val}</text>')
+            
         svg.append('</g>')
     svg.append('</g>')
 
