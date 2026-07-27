@@ -195,14 +195,12 @@ def generate_svg(mode='dark'):
     dots = process_portrait(mode)
     num_dots = len(dots)
     
-    # Intro Groups (60 interleaved random groups)
     num_intro_groups = 60
     np.random.seed(42)
     shuffled_idx = np.random.permutation(num_dots)
     intro_groups_idx = np.array_split(shuffled_idx, num_intro_groups)
     intro_groups_dots = [[dots[i] for i in grp] for grp in intro_groups_idx]
     
-    # Drift Bands (~94 bands with noise sigma~4)
     num_bands = 94
     noise = np.random.normal(0, 4.0, size=num_dots)
     noisy_y = dots[:, 1] + noise
@@ -297,25 +295,26 @@ def generate_svg(mode='dark'):
     # Portrait Container
     svg.append(f'<g id="portrait-container">')
     
-    # Layer A: Intro Layer (Fades in over 1.8s, then FADES OUT COMPLETELY to opacity 0 at 3.0s)
+    # Layer A: Intro Layer (Fades in over 1.8s, then FADES OUT COMPLETELY to opacity 0 at 2.8s)
     svg.append(f'<g id="intro-layer" stroke="{pal["portrait_dot"]}" stroke-width="{SCALE:.2f}" shape-rendering="crispEdges">')
-    # Add explicit container fade-out at 3.0s so intro layer vanishes completely!
-    svg.append('<animate attributeName="opacity" values="1;1;0" keyTimes="0; 0.845; 1" begin="0s" dur="3.5s" fill="freeze"/>')
+    svg.append('<animate attributeName="opacity" values="1;1;0" keyTimes="0; 0.8; 1" begin="0s" dur="3.0s" fill="freeze"/>')
     
     for g_idx, grp_dots in enumerate(intro_groups_dots):
         path_d = dots_to_stroke_runs(grp_dots, X_OFFSET, Y_OFFSET, SCALE)
         delay = g_idx * 0.03
         svg.append(f'<path d="{path_d}" opacity="0">')
-        svg.append(f'<animate attributeName="opacity" values="0;1" dur="1.8s" begin="{delay:.2f}s" fill="freeze"/>')
+        svg.append(f'<animate attributeName="opacity" values="0;1" dur="1.6s" begin="{delay:.2f}s" fill="freeze"/>')
         svg.append('</path>')
     svg.append('</g>')
     
-    # Layer B: Main Portrait Drift Layer (SMIL Loop 14.2s)
-    # Starts at opacity=1 after intro, then slowly fades out from 1 to 0 when logo comes in (3.0s to 4.3s)
-    # Stays at opacity=0 during logo holds (4.3s to 12.9s)
-    # Fades back in from 0 to 1 when returning (12.9s to 14.2s)
-    key_times = "0; 0.211; 0.303; 0.444; 0.535; 0.676; 0.768; 0.908; 1.0"
-    opac_vals = "1; 1; 0; 0; 0; 0; 0; 0; 1"
+    # Layer B: Main Portrait Drift Layer (Optimized 13.0s SMIL Loop with FAST 0.6s ENDING TRANSITION!)
+    # 0s-3.0s (Photo Hold): Opacity = 1
+    # 3.0s-3.8s (Logo 1 coming in): Opacity fades 1 -> 0
+    # 3.8s-11.8s (Logo Phase): Opacity = 0 (completely invisible)
+    # 11.8s-12.4s (FAST 0.6s Ending Trans): Opacity = 0 -> 1 (snaps back crisply!)
+    # 12.4s-13.0s (Photo Restored): Opacity = 1
+    key_times = "0; 0.231; 0.292; 0.446; 0.523; 0.677; 0.754; 0.908; 0.954; 1.0"
+    opac_vals = "1; 1; 0; 0; 0; 0; 0; 0; 1; 1"
 
     svg.append(f'<g id="drift-layer" stroke="{pal["portrait_dot"]}" stroke-width="{SCALE:.2f}" shape-rendering="crispEdges">')
     for b_idx, band in enumerate(bands_dots):
@@ -324,21 +323,22 @@ def generate_svg(mode='dark'):
         bx = vec_x * factor
         by = vec_y * factor
 
-        trans_vals = f"0,0; 0,0; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; 0,0"
+        trans_vals = f"0,0; 0,0; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; 0,0; 0,0"
 
         svg.append(f'<g>')
         svg.append(f'<path d="{path_d}"/>')
-        svg.append(f'<animateTransform attributeName="transform" type="translate" values="{trans_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
-        svg.append(f'<animate attributeName="opacity" values="{opac_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
+        svg.append(f'<animateTransform attributeName="transform" type="translate" values="{trans_vals}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
+        svg.append(f'<animate attributeName="opacity" values="{opac_vals}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
         svg.append('</g>')
     svg.append('</g>')
 
-    # Layer C: Logo Travellers Swarm
-    # 0s to 3.0s (Portrait visible): Opacity = 0 (completely invisible)
-    # 3.0s to 4.3s (Logo coming in): Opacity fades from 0 to 1 (as photo slowly becomes invisible)
-    # 4.3s to 12.9s (Logo morphing): Opacity = 1 (Flutter -> Code -> Vercel)
-    # 12.9s to 14.2s (Return to photo): Opacity fades from 1 to 0 (as photo slowly re-appears)
-    traveller_opac = "0; 0; 1; 1; 1; 1; 1; 1; 0"
+    # Layer C: Logo Travellers Swarm (Fast Ending Transition)
+    # 0s-3.0s (Photo Hold): Opacity = 0
+    # 3.0s-3.8s (Logo 1 coming in): Opacity 0 -> 1
+    # 3.8s-11.8s (Logo Phase): Opacity = 1 (Flutter -> Code -> Vercel)
+    # 11.8s-12.4s (FAST 0.6s Ending Trans): Opacity 1 -> 0 (logo rapidly dissolves away!)
+    # 12.4s-13.0s (Photo Restored): Opacity = 0
+    traveller_opac = "0; 0; 1; 1; 1; 1; 1; 1; 0; 0"
 
     svg.append(f'<g id="travellers-swarm">')
     dot_r = 1.2
@@ -352,13 +352,13 @@ def generate_svg(mode='dark'):
         x3 = X_OFFSET + p3[i, 0] * SCALE
         y3 = Y_OFFSET + p3[i, 1] * SCALE
 
-        cx_vals = f"{x1:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}; {x2:.1f}; {x2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}"
-        cy_vals = f"{y1:.1f}; {y1:.1f}; {y1:.1f}; {y1:.1f}; {y2:.1f}; {y2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}"
+        cx_vals = f"{x1:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}; {x2:.1f}; {x2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}"
+        cy_vals = f"{y1:.1f}; {y1:.1f}; {y1:.1f}; {y1:.1f}; {y2:.1f}; {y2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}"
 
         svg.append(f'<circle cx="{x1:.1f}" cy="{y1:.1f}" r="{dot_r}" fill="{pal["portrait_dot"]}" opacity="0">')
-        svg.append(f'<animate attributeName="cx" values="{cx_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
-        svg.append(f'<animate attributeName="cy" values="{cy_vals}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
-        svg.append(f'<animate attributeName="opacity" values="{traveller_opac}" keyTimes="{key_times}" dur="14.2s" repeatCount="indefinite"/>')
+        svg.append(f'<animate attributeName="cx" values="{cx_vals}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
+        svg.append(f'<animate attributeName="cy" values="{cy_vals}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
+        svg.append(f'<animate attributeName="opacity" values="{traveller_opac}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
         svg.append('</circle>')
     svg.append('</g>')
 
