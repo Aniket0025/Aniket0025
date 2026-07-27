@@ -10,7 +10,6 @@ SVG_W, SVG_H = 1180, 610
 PORTRAIT_GRID_W, PORTRAIT_GRID_H = 300, 340
 
 # Position portrait frame inside left panel:
-# Panel left: x=24 to 434 (width 410, height 528)
 X_OFFSET = 70
 Y_OFFSET = 142
 SCALE = 1.06
@@ -54,11 +53,9 @@ PALETTE = {
 # --- 1. Image Processing & Dithering ---
 def process_portrait(mode='dark'):
     img = Image.open('photo.png').convert('RGB')
-    
     img_resized = img.resize((PORTRAIT_GRID_W, PORTRAIT_GRID_H), Image.Resampling.LANCZOS)
     img_np = np.array(img_resized)
     
-    # Background Segmentation & Noise Removal
     bg_sample = np.mean(img_np[:25, :25, :3], axis=(0,1))
     dist = np.linalg.norm(img_np[:, :, :3].astype(float) - bg_sample, axis=2)
     
@@ -74,7 +71,6 @@ def process_portrait(mode='dark'):
     mask = binary_closing(mask, structure=np.ones((5,5)))
     mask = binary_fill_holes(mask)
     
-    # Contrast Pipeline:
     gray = img_resized.convert('L')
     gray = ImageEnhance.Contrast(gray).enhance(1.3)
     gray = ImageOps.autocontrast(gray, cutoff=1)
@@ -82,7 +78,6 @@ def process_portrait(mode='dark'):
     
     gray_arr = np.array(gray, dtype=float)
     
-    # Serpentine Floyd-Steinberg Dithering
     dither = gray_arr.copy()
     out_bits = np.zeros_like(dither, dtype=int)
     
@@ -154,7 +149,6 @@ def generate_logos(num_points=900):
     p2_raw = make_logo("code")
     p3_raw = make_logo("vercel")
     
-    # Optimal Transport Matching
     cost1 = np.linalg.norm(p1[:, None, :] - p2_raw[None, :, :], axis=2)
     r1, c1 = linear_sum_assignment(cost1)
     p2 = p2_raw[c1]
@@ -169,7 +163,6 @@ def generate_logos(num_points=900):
 def dots_to_stroke_runs(dots, x_offset, y_offset, scale):
     sorted_dots = sorted(dots, key=lambda p: (p[1], p[0]))
     runs = []
-    
     if not sorted_dots:
         return ""
         
@@ -186,7 +179,6 @@ def dots_to_stroke_runs(dots, x_offset, y_offset, scale):
             ry = round(y_offset + curr_y * scale + scale / 2.0, 1)
             rw = round(curr_len * scale, 1)
             runs.append(f"M{rx},{ry}h{rw}")
-            
             curr_y = y
             curr_start_x = x
             curr_len = 1
@@ -195,37 +187,13 @@ def dots_to_stroke_runs(dots, x_offset, y_offset, scale):
     ry = round(y_offset + curr_y * scale + scale / 2.0, 1)
     rw = round(curr_len * scale, 1)
     runs.append(f"M{rx},{ry}h{rw}")
-    
     return "".join(runs)
 
-# --- 4. Quality Verification Metrics ---
-def compute_evenness_metric(groups, grid_w, grid_h):
-    stds = []
-    for grp in groups:
-        if len(grp) == 0:
-            continue
-        counts = np.zeros((4, 4))
-        for x, y in grp:
-            bx = min(3, int(x / (grid_w / 4.0)))
-            by = min(3, int(y / (grid_h / 4.0)))
-            counts[by, bx] += 1
-        probs = counts / float(len(grp))
-        stds.append(np.std(probs))
-    return float(np.mean(stds))
-
-def compute_straight_boundary_metric(bands, noisy_y, noise_sigma=4.0):
-    band_heights = [np.max([y for x,y in b]) - np.min([y for x,y in b]) for b in bands if len(b) > 0]
-    avg_h = np.mean(band_heights)
-    metric = 0.01 + 0.16 * max(0.0, (1.0 - (noise_sigma / max(1.0, avg_h))))
-    return float(metric)
-
-# --- 5. Generate Full Banner SVG ---
+# --- 4. Generate Full Banner SVG ---
 def generate_svg(mode='dark'):
     pal = PALETTE[mode]
     dots = process_portrait(mode)
     num_dots = len(dots)
-    
-    print(f"[{mode.upper()}] Total portrait dots: {num_dots}")
     
     # Intro Groups (60 interleaved random groups)
     num_intro_groups = 60
@@ -233,9 +201,6 @@ def generate_svg(mode='dark'):
     shuffled_idx = np.random.permutation(num_dots)
     intro_groups_idx = np.array_split(shuffled_idx, num_intro_groups)
     intro_groups_dots = [[dots[i] for i in grp] for grp in intro_groups_idx]
-    
-    evenness = compute_evenness_metric(intro_groups_dots, PORTRAIT_GRID_W, PORTRAIT_GRID_H)
-    print(f"[{mode.upper()}] Intro Evenness Metric: {evenness:.4f} (target ~0.05)")
     
     # Drift Bands (~94 bands with noise sigma~4)
     num_bands = 94
@@ -245,23 +210,16 @@ def generate_svg(mode='dark'):
     band_splits = np.array_split(band_indices, num_bands)
     bands_dots = [[dots[i] for i in grp] for grp in band_splits]
     
-    boundary_metric = compute_straight_boundary_metric(bands_dots, noisy_y, noise_sigma=4.0)
-    print(f"[{mode.upper()}] Drift Boundary Metric: {boundary_metric:.4f} (target ~0.01 organic)")
-    
-    # Logos for travellers
     p1, p2, p3 = generate_logos(900)
     
-    # Centroid of Logo 1 in SVG coordinates
     l1_cx = X_OFFSET + np.mean(p1[:, 0]) * SCALE
     l1_cy = Y_OFFSET + np.mean(p1[:, 1]) * SCALE
     port_cx = X_OFFSET + (PORTRAIT_GRID_W / 2.0) * SCALE
     port_cy = Y_OFFSET + (PORTRAIT_GRID_H / 2.0) * SCALE
     
-    # Drift translation vector (42% toward Logo 1 centroid)
     vec_x = (l1_cx - port_cx) * 0.42
     vec_y = (l1_cy - port_cy) * 0.42
     
-    # Info panel data rows
     rows_data = [
         ("Subject", "Aniket Audumbar Yadav"),
         ("Role", "Full-Stack Developer, AIML"),
@@ -281,7 +239,6 @@ def generate_svg(mode='dark'):
         ("Grid.Instagram", "aniket_yadav_0025")
     ]
     
-    # Build SVG content
     svg = []
     svg.append(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {SVG_W} {SVG_H}" width="{SVG_W}" height="{SVG_H}">')
     svg.append('<defs>')
@@ -302,20 +259,19 @@ def generate_svg(mode='dark'):
     # Outer Background
     svg.append(f'<rect width="{SVG_W}" height="{SVG_H}" fill="{pal["bg"]}" rx="12"/>')
     
-    # Header Window Bar (Top bar)
+    # Header Bar
     svg.append(f'<rect x="0" y="0" width="{SVG_W}" height="42" fill="{pal["card_bg"]}" rx="12"/>')
     svg.append(f'<rect x="0" y="30" width="{SVG_W}" height="12" fill="{pal["card_bg"]}"/>')
     svg.append(f'<line x1="0" y1="42" x2="{SVG_W}" y2="42" stroke="{pal["card_border"]}" stroke-width="1"/>')
     
-    # Terminal controls
+    # Controls
     svg.append('<circle cx="24" cy="21" r="6" fill="#FF5F56"/>')
     svg.append('<circle cx="44" cy="21" r="6" fill="#FFBD2E"/>')
     svg.append('<circle cx="64" cy="21" r="6" fill="#27C93F"/>')
     
-    # Header Title
     svg.append(f'<text x="88" y="25" class="hdr-title">profile.sh --live</text>')
     
-    # Live Badge & Handle Pill in Top Right
+    # Badges
     svg.append('<g transform="translate(930, 10)">')
     svg.append(f'<rect x="0" y="0" width="75" height="22" rx="11" fill="rgba(239, 68, 68, 0.12)" stroke="rgba(239, 68, 68, 0.4)" stroke-width="1"/>')
     svg.append(f'<circle cx="14" cy="11" r="4" fill="{pal["live_red"]}">')
@@ -329,22 +285,23 @@ def generate_svg(mode='dark'):
     svg.append(f'<text x="12" y="15" class="hdr-pill">@Aniket0025</text>')
     svg.append('</g>')
     
-    # --- Main Cards Layout ---
-    # Left Card (VISUAL.MAP)
+    # Cards
     svg.append(f'<rect x="24" y="58" width="410" height="528" fill="{pal["card_bg"]}" stroke="{pal["card_border"]}" stroke-width="1" rx="8"/>')
     svg.append(f'<text x="44" y="86" class="section-lbl">VISUAL.MAP</text>')
     svg.append(f'<line x1="24" y1="98" x2="434" y2="98" stroke="{pal["card_border"]}" stroke-width="1"/>')
     
-    # Right Card (SYSTEM.INFO)
     svg.append(f'<rect x="454" y="58" width="702" height="528" fill="{pal["card_bg"]}" stroke="{pal["card_border"]}" stroke-width="1" rx="8"/>')
     svg.append(f'<text x="478" y="86" class="section-lbl">SYSTEM.INFO</text>')
     svg.append(f'<line x1="454" y1="98" x2="1156" y2="98" stroke="{pal["card_border"]}" stroke-width="1"/>')
     
-    # --- Portrait Group (Left Panel) ---
+    # Portrait Container
     svg.append(f'<g id="portrait-container">')
     
-    # Layer A: Intro Fade-in Duplicate Layer (~180KB, scattered random groups)
+    # Layer A: Intro Layer (Fades in over 1.8s, then FADES OUT COMPLETELY to opacity 0 at 3.0s)
     svg.append(f'<g id="intro-layer" stroke="{pal["portrait_dot"]}" stroke-width="{SCALE:.2f}" shape-rendering="crispEdges">')
+    # Add explicit container fade-out at 3.0s so intro layer vanishes completely!
+    svg.append('<animate attributeName="opacity" values="1;1;0" keyTimes="0; 0.845; 1" begin="0s" dur="3.5s" fill="freeze"/>')
+    
     for g_idx, grp_dots in enumerate(intro_groups_dots):
         path_d = dots_to_stroke_runs(grp_dots, X_OFFSET, Y_OFFSET, SCALE)
         delay = g_idx * 0.03
@@ -353,13 +310,12 @@ def generate_svg(mode='dark'):
         svg.append('</path>')
     svg.append('</g>')
     
-    # Layer B: Main Portrait Drift Bands (94 drift bands)
-    # Strict phase separation:
-    # 0s-3.0s (Portrait Hold): Opacity = 1, Translate = (0,0)
-    # 3.0s-4.3s (Trans to Logo 1): Opacity = 1 -> 0, Translate = (0,0) -> (bx,by)
-    # 4.3s-12.9s (Logo Phase): Opacity = 0
-    # 12.9s-14.2s (Return to Portrait): Opacity = 0 -> 1, Translate = (bx,by) -> (0,0)
+    # Layer B: Main Portrait Drift Layer (SMIL Loop 14.2s)
+    # Starts at opacity=1 after intro, then slowly fades out from 1 to 0 when logo comes in (3.0s to 4.3s)
+    # Stays at opacity=0 during logo holds (4.3s to 12.9s)
+    # Fades back in from 0 to 1 when returning (12.9s to 14.2s)
     key_times = "0; 0.211; 0.303; 0.444; 0.535; 0.676; 0.768; 0.908; 1.0"
+    opac_vals = "1; 1; 0; 0; 0; 0; 0; 0; 1"
 
     svg.append(f'<g id="drift-layer" stroke="{pal["portrait_dot"]}" stroke-width="{SCALE:.2f}" shape-rendering="crispEdges">')
     for b_idx, band in enumerate(bands_dots):
@@ -369,7 +325,6 @@ def generate_svg(mode='dark'):
         by = vec_y * factor
 
         trans_vals = f"0,0; 0,0; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; {bx:.1f},{by:.1f}; 0,0"
-        opac_vals = "1; 1; 0; 0; 0; 0; 0; 0; 1"
 
         svg.append(f'<g>')
         svg.append(f'<path d="{path_d}"/>')
@@ -378,12 +333,11 @@ def generate_svg(mode='dark'):
         svg.append('</g>')
     svg.append('</g>')
 
-    # Layer C: Travellers Swarm (~900 dots morphing between logos)
-    # Strict phase separation:
-    # 0s-3.0s (Portrait Hold): Opacity = 0
-    # 3.0s-4.3s (Trans to Logo 1): Opacity = 0 -> 1
-    # 4.3s-12.9s (Logo Phase): Opacity = 1 (Morphing p1 -> p2 -> p3)
-    # 12.9s-14.2s (Return to Portrait): Opacity = 1 -> 0
+    # Layer C: Logo Travellers Swarm
+    # 0s to 3.0s (Portrait visible): Opacity = 0 (completely invisible)
+    # 3.0s to 4.3s (Logo coming in): Opacity fades from 0 to 1 (as photo slowly becomes invisible)
+    # 4.3s to 12.9s (Logo morphing): Opacity = 1 (Flutter -> Code -> Vercel)
+    # 12.9s to 14.2s (Return to photo): Opacity fades from 1 to 0 (as photo slowly re-appears)
     traveller_opac = "0; 0; 1; 1; 1; 1; 1; 1; 0"
 
     svg.append(f'<g id="travellers-swarm">')
@@ -410,7 +364,7 @@ def generate_svg(mode='dark'):
 
     svg.append('</g>')
 
-    # --- System Info Rows (Right Panel) ---
+    # Info Rows
     start_y = 126
     row_h = 27
     left_x = 478
