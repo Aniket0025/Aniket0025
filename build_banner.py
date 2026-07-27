@@ -120,7 +120,7 @@ def process_portrait(mode='dark'):
     dots = np.column_stack([xs, ys])
     return dots
 
-# --- 2. Logo Point Clouds & Optimal Transport ---
+# --- 2. Logo Point Clouds & Optimal Transport Chain ---
 def generate_logos(num_points=900):
     def make_logo(logo_type):
         img = Image.new('L', (PORTRAIT_GRID_W, PORTRAIT_GRID_H), 0)
@@ -145,19 +145,11 @@ def generate_logos(num_points=900):
         idx = np.random.choice(len(xs), size=num_points, replace=(len(xs) < num_points))
         return np.column_stack([xs[idx], ys[idx]]).astype(float)
         
-    p1 = make_logo("flutter")
+    p1_raw = make_logo("flutter")
     p2_raw = make_logo("code")
     p3_raw = make_logo("vercel")
     
-    cost1 = np.linalg.norm(p1[:, None, :] - p2_raw[None, :, :], axis=2)
-    r1, c1 = linear_sum_assignment(cost1)
-    p2 = p2_raw[c1]
-    
-    cost2 = np.linalg.norm(p2[:, None, :] - p3_raw[None, :, :], axis=2)
-    r2, c2 = linear_sum_assignment(cost2)
-    p3 = p3_raw[c2]
-    
-    return p1, p2, p3
+    return p1_raw, p2_raw, p3_raw
 
 # --- 3. Optimized Path Run Generator ---
 def dots_to_stroke_runs(dots, x_offset, y_offset, scale):
@@ -195,12 +187,14 @@ def generate_svg(mode='dark'):
     dots = process_portrait(mode)
     num_dots = len(dots)
     
+    # Intro Groups
     num_intro_groups = 60
     np.random.seed(42)
     shuffled_idx = np.random.permutation(num_dots)
     intro_groups_idx = np.array_split(shuffled_idx, num_intro_groups)
     intro_groups_dots = [[dots[i] for i in grp] for grp in intro_groups_idx]
     
+    # Drift Bands
     num_bands = 94
     noise = np.random.normal(0, 4.0, size=num_dots)
     noisy_y = dots[:, 1] + noise
@@ -208,7 +202,26 @@ def generate_svg(mode='dark'):
     band_splits = np.array_split(band_indices, num_bands)
     bands_dots = [[dots[i] for i in grp] for grp in band_splits]
     
-    p1, p2, p3 = generate_logos(900)
+    # Sample 900 photo points for direct particle morphing chain
+    photo_sample_idx = np.random.choice(num_dots, size=900, replace=False)
+    p_photo = dots[photo_sample_idx].astype(float)
+    
+    p1_raw, p2_raw, p3_raw = generate_logos(900)
+    
+    # Match p_photo -> p1
+    cost0 = np.linalg.norm(p_photo[:, None, :] - p1_raw[None, :, :], axis=2)
+    _, c0 = linear_sum_assignment(cost0)
+    p1 = p1_raw[c0]
+
+    # Match p1 -> p2
+    cost1 = np.linalg.norm(p1[:, None, :] - p2_raw[None, :, :], axis=2)
+    _, c1 = linear_sum_assignment(cost1)
+    p2 = p2_raw[c1]
+
+    # Match p2 -> p3
+    cost2 = np.linalg.norm(p2[:, None, :] - p3_raw[None, :, :], axis=2)
+    _, c2 = linear_sum_assignment(cost2)
+    p3 = p3_raw[c2]
     
     l1_cx = X_OFFSET + np.mean(p1[:, 0]) * SCALE
     l1_cy = Y_OFFSET + np.mean(p1[:, 1]) * SCALE
@@ -307,13 +320,9 @@ def generate_svg(mode='dark'):
         svg.append('</path>')
     svg.append('</g>')
     
-    # Layer B: Main Portrait Drift Layer (Optimized 13.0s SMIL Loop with FAST 0.6s ENDING TRANSITION!)
-    # 0s-3.0s (Photo Hold): Opacity = 1
-    # 3.0s-3.8s (Logo 1 coming in): Opacity fades 1 -> 0
-    # 3.8s-11.8s (Logo Phase): Opacity = 0 (completely invisible)
-    # 11.8s-12.4s (FAST 0.6s Ending Trans): Opacity = 0 -> 1 (snaps back crisply!)
-    # 12.4s-13.0s (Photo Restored): Opacity = 1
-    key_times = "0; 0.231; 0.292; 0.446; 0.523; 0.677; 0.754; 0.908; 0.954; 1.0"
+    # Layer B: Main Portrait Drift Layer (SMIL Loop 13.0s)
+    # Photo is visible (0s-3.0s), dissolves down (3.0s-3.8s), stays hidden (3.8s-11.8s), snaps back (11.8s-12.5s)
+    key_times = "0; 0.231; 0.292; 0.446; 0.523; 0.677; 0.754; 0.908; 0.962; 1.0"
     opac_vals = "1; 1; 0; 0; 0; 0; 0; 0; 1; 1"
 
     svg.append(f'<g id="drift-layer" stroke="{pal["portrait_dot"]}" stroke-width="{SCALE:.2f}" shape-rendering="crispEdges">')
@@ -332,17 +341,26 @@ def generate_svg(mode='dark'):
         svg.append('</g>')
     svg.append('</g>')
 
-    # Layer C: Logo Travellers Swarm (Fast Ending Transition)
-    # 0s-3.0s (Photo Hold): Opacity = 0
-    # 3.0s-3.8s (Logo 1 coming in): Opacity 0 -> 1
-    # 3.8s-11.8s (Logo Phase): Opacity = 1 (Flutter -> Code -> Vercel)
-    # 11.8s-12.4s (FAST 0.6s Ending Trans): Opacity 1 -> 0 (logo rapidly dissolves away!)
-    # 12.4s-13.0s (Photo Restored): Opacity = 0
+    # Layer C: Direct Photo-to-Logo-to-Photo Particle Morph Swarm
+    # 0s-3.0s: At p_photo, opacity = 0
+    # 3.0s-3.8s: Fly p_photo -> p1 (Flutter logo), opacity 0 -> 1 (Particles flow OUT of photo to build Flutter logo!)
+    # 3.8s-5.8s: Hold p1 (Flutter logo), opacity = 1
+    # 5.8s-6.8s: Fly p1 -> p2 (Code logo), opacity = 1 (Morph to Code logo!)
+    # 6.8s-8.8s: Hold p2 (Code logo), opacity = 1
+    # 8.8s-9.8s: Fly p2 -> p3 (Vercel logo), opacity = 1 (Morph to Vercel logo!)
+    # 9.8s-11.8s: Hold p3 (Vercel logo), opacity = 1
+    # 11.8s-12.5s: Fly p3 -> p_photo, opacity 1 -> 0 (Particles fly BACK IN to assemble photo!)
+    # 12.5s-13.0s: At p_photo, opacity = 0
     traveller_opac = "0; 0; 1; 1; 1; 1; 1; 1; 0; 0"
 
     svg.append(f'<g id="travellers-swarm">')
     dot_r = 1.2
     for i in range(900):
+        # Photo start/end point
+        x0 = X_OFFSET + p_photo[i, 0] * SCALE
+        y0 = Y_OFFSET + p_photo[i, 1] * SCALE
+
+        # Logo points
         x1 = X_OFFSET + p1[i, 0] * SCALE
         y1 = Y_OFFSET + p1[i, 1] * SCALE
 
@@ -352,10 +370,11 @@ def generate_svg(mode='dark'):
         x3 = X_OFFSET + p3[i, 0] * SCALE
         y3 = Y_OFFSET + p3[i, 1] * SCALE
 
-        cx_vals = f"{x1:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}; {x2:.1f}; {x2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}"
-        cy_vals = f"{y1:.1f}; {y1:.1f}; {y1:.1f}; {y1:.1f}; {y2:.1f}; {y2:.1f}; {x3:.1f}; {x1:.1f}; {x1:.1f}; {x1:.1f}"
+        # Direct flow chain: p_photo -> p1 -> p2 -> p3 -> p_photo
+        cx_vals = f"{x0:.1f}; {x0:.1f}; {x1:.1f}; {x1:.1f}; {x2:.1f}; {x2:.1f}; {x3:.1f}; {x3:.1f}; {x0:.1f}; {x0:.1f}"
+        cy_vals = f"{y0:.1f}; {y0:.1f}; {y1:.1f}; {y1:.1f}; {y2:.1f}; {y2:.1f}; {x3:.1f}; {y3:.1f}; {y0:.1f}; {y0:.1f}"
 
-        svg.append(f'<circle cx="{x1:.1f}" cy="{y1:.1f}" r="{dot_r}" fill="{pal["portrait_dot"]}" opacity="0">')
+        svg.append(f'<circle cx="{x0:.1f}" cy="{y0:.1f}" r="{dot_r}" fill="{pal["portrait_dot"]}" opacity="0">')
         svg.append(f'<animate attributeName="cx" values="{cx_vals}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
         svg.append(f'<animate attributeName="cy" values="{cy_vals}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
         svg.append(f'<animate attributeName="opacity" values="{traveller_opac}" keyTimes="{key_times}" dur="13.0s" repeatCount="indefinite"/>')
